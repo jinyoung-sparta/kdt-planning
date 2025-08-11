@@ -144,6 +144,17 @@ def create_excel_file(track_name=""):
     except Exception as e:
         return False, None, f"엑셀 파일 생성 중 오류가 발생했습니다: {str(e)}"
 
+# 콜백 함수들 정의
+def update_template_data():
+    """평가 템플릿 데이터 업데이트 콜백"""
+    if "template_editor" in st.session_state:
+        st.session_state["template_table"] = st.session_state["template_editor"]
+
+def update_problem_data():
+    """문제 템플릿 데이터 업데이트 콜백"""
+    if "problem_editor" in st.session_state:
+        st.session_state["problem_table"] = st.session_state["problem_editor"]
+
 # 페이지 설정
 st.set_page_config(
     page_title="스파르타 취업 역량 평가",
@@ -330,18 +341,7 @@ if page == "평가표":
 elif page == "출제자 평가 템플릿":
     st.header("출제자 평가 템플릿")
 
-    # st.info("""
-    #     **📋 평가 템플릿 작성 방법**
-    #     1. 평가표에서 선택한 평가 항목들을 바탕으로 평가 템플릿을 작성
-    #     2. 평가 내용: 소분류 내용을 문제 내용에 맞게 구체적으로 작성
-    #     3. 배점: 총합이 100점이 되도로 구성
-    #     4. 상: 작성한 배점을 모두 충족하는 답안의 기준
-    #     5. 중: 상의 1/2점을 충족하는 답안의 기준
-    #     6. 하: 중의 1/2점을 충족하는 답안의 기준
-    #     7. 배점 X: 0점일때의 답안의 기준
-    # """)
-
-    if "template_table" in st.session_state:
+    if "template_table" in st.session_state and not st.session_state["template_table"].empty:
         # 텍스트 입력 가능한 컬럼 설정
         col_config = {
             "평가 내용": st.column_config.TextColumn("평가 내용", width="medium"),
@@ -352,22 +352,28 @@ elif page == "출제자 평가 템플릿":
             "배점 X": st.column_config.TextColumn("배점 X", width="medium"),
         }
         
-        # 데이터 편집기
+        # 데이터 편집기 (콜백과 키 추가)
         edited_df = st.data_editor(
             st.session_state["template_table"],
             column_config=col_config,
             use_container_width=True,
-            num_rows="dynamic"
+            num_rows="dynamic",
+            key="template_editor",
+            on_change=update_template_data
         )
         
-        # 편집된 데이터를 세션 상태에 저장
+        # 편집된 데이터를 즉시 세션 상태에 저장
         st.session_state["template_table"] = edited_df
+        
+        # 저장 상태 표시
+        if st.session_state.get("template_editor_changed", False):
+            st.success("✅ 변경사항이 자동 저장되었습니다!")
            
     else:
         st.info("아직 추가된 항목이 없습니다. 먼저 '평가표' 페이지에서 항목을 추가해주세요.")
 
     # 문제 만들기 버튼 (현재 평가 템플릿을 문제 템플릿으로 복사)
-    if "template_table" in st.session_state:
+    if "template_table" in st.session_state and not st.session_state["template_table"].empty:
         if st.button("문제 만들기", key="make_problem"):
             # 문제 템플릿 열 정의
             problem_columns = [
@@ -382,7 +388,7 @@ elif page == "출제자 평가 템플릿":
                 "하위 기능": "",
                 "소분류": src_df["소분류"] if "소분류" in src_df.columns else "",
                 "평가 내용": src_df["평가 내용"] if "평가 내용" in src_df.columns else "",
-                "진행상황": "",
+                "진행상황": "진행중",
                 "유형": "",
                 "난이도": "",
                 "출제 목적": "",
@@ -403,20 +409,6 @@ elif page == "출제자 평가 템플릿":
 elif page == "출제자 문제 템플릿":
     st.header("출제자 문제 템플릿")
 
-    # st.info("""
-    #     **📋 문제제 템플릿 작성 방법**
-    #     1. 평가 템플릿에서 작성한 평가 내용을 바탕으로 문제 제작
-    #     2. 문제명: 문제를 대표할 수 있는 제목
-    #     3. 하위 기능: 문제를 구성하는 하위 문제들, 하나 이상의 평가 내용과 매핑되어야 함
-    #     4. 진행상황: 문제 제작 진행 상황을 표기 (진행 중, 완료)
-    #     5. 유형: 문제 유형을 표기 (코딩테스트, 실무과제, 지필평가)
-    #     6. 출제 목적 및 문제 설명: 하위 기능의 출제 목적과 내용을 설명
-    #     7. 필수 요구사항: 답안에 점수를 주기 위한 최소 요구사항
-    #     8. 선택 요구사항: 상과 중을 판단하는 요구사항
-    #     9. 제약 조건: 문제 풀이 시 참고해야 하는 제약 사항
-    #     10. 
-    # """)
-
     if "problem_table" in st.session_state and not st.session_state["problem_table"].empty:
         # 진행상황 컬럼만 진행중/진행 완료 선택 가능한 Selectbox로, 나머지는 기본값
         col_config = {
@@ -424,13 +416,24 @@ elif page == "출제자 문제 템플릿":
             "유형": st.column_config.SelectboxColumn("유형", options=["코딩테스트", "실무과제", "지필평가"], required=True),
             "난이도": st.column_config.SelectboxColumn("난이도", options=["상", "중", "하"], required=True),
         }
+        
+        # 데이터 편집기 (콜백과 키 추가)
         edited_df = st.data_editor(
             st.session_state["problem_table"],
             column_config=col_config,
             use_container_width=True,
-            num_rows="dynamic"
+            num_rows="dynamic",
+            key="problem_editor",
+            on_change=update_problem_data
         )
+        
+        # 편집된 데이터를 즉시 세션 상태에 저장
         st.session_state["problem_table"] = edited_df
+        
+        # 저장 상태 표시
+        if st.session_state.get("problem_editor_changed", False):
+            st.success("✅ 변경사항이 자동 저장되었습니다!")
+            
     else:
         st.info("아직 생성된 문제가 없습니다. '출제자 평가 템플릿'에서 '문제 만들기' 버튼을 눌러주세요.")
 
