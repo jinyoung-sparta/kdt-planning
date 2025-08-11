@@ -232,16 +232,6 @@ if st.sidebar.button("📊 시트 만들기", use_container_width=True, type="pr
     else:
         st.sidebar.error(f"엑셀 파일 생성 실패: {filename}")
 
-# 디버그 모드 (개발 중에만 사용)
-with st.sidebar:
-    if st.checkbox("디버그 모드"):
-        st.write("**세션 상태 확인**")
-        if not st.session_state["template_table"].empty:
-            st.write(f"평가 템플릿 행 수: {len(st.session_state['template_table'])}")
-        if not st.session_state["problem_table"].empty:
-            st.write(f"문제 템플릿 행 수: {len(st.session_state['problem_table'])}")
-        st.write(f"현재 페이지: {st.session_state.current_page}")
-
 page = st.session_state.current_page
 
 if page == "평가표":
