@@ -84,23 +84,42 @@ def create_excel_file(track_name=""):
         # ExcelWriter 생성
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             # 평가 템플릿 시트
-            if "template_table" in st.session_state and not st.session_state["template_table"].empty:
-                template_df = st.session_state["template_table"].copy()
-                template_df.to_excel(writer, sheet_name='출제자_평가_템플릿', index=False)
+            try:
+                if ("template_table" in st.session_state and 
+                    st.session_state["template_table"] is not None and 
+                    isinstance(st.session_state["template_table"], pd.DataFrame) and 
+                    not st.session_state["template_table"].empty):
+                    template_df = st.session_state["template_table"].copy()
+                    template_df.to_excel(writer, sheet_name='출제자_평가_템플릿', index=False)
+            except (AttributeError, TypeError):
+                pass
 
             # 문제 템플릿 시트
-            if "problem_table" in st.session_state and not st.session_state["problem_table"].empty:
-                problem_df = st.session_state["problem_table"].copy()
-                problem_df.to_excel(writer, sheet_name='출제자_문제_템플릿', index=False)
+            try:
+                if ("problem_table" in st.session_state and 
+                    st.session_state["problem_table"] is not None and 
+                    isinstance(st.session_state["problem_table"], pd.DataFrame) and 
+                    not st.session_state["problem_table"].empty):
+                    problem_df = st.session_state["problem_table"].copy()
+                    problem_df.to_excel(writer, sheet_name='출제자_문제_템플릿', index=False)
 
-            # 문제 템플릿 시트
-            if "problem_table" in st.session_state and not st.session_state["problem_table"].empty:
-                problem_df = st.session_state["problem_table"].copy()
-                problem_df.to_excel(writer, sheet_name='검수자_문제_템플릿', index=False)        
+                    # 검수자 문제 템플릿 시트 (동일한 내용)
+                    problem_df.to_excel(writer, sheet_name='검수자_문제_템플릿', index=False)        
+            except (AttributeError, TypeError):
+                pass
             
             # 빈 시트들이 없다면 기본 템플릿 생성
-            if ("template_table" not in st.session_state or st.session_state["template_table"].empty) and \
-               ("problem_table" not in st.session_state or st.session_state["problem_table"].empty):
+            template_exists = ("template_table" in st.session_state and 
+                             st.session_state["template_table"] is not None and 
+                             isinstance(st.session_state["template_table"], pd.DataFrame) and 
+                             not st.session_state["template_table"].empty)
+            
+            problem_exists = ("problem_table" in st.session_state and 
+                            st.session_state["problem_table"] is not None and 
+                            isinstance(st.session_state["problem_table"], pd.DataFrame) and 
+                            not st.session_state["problem_table"].empty)
+            
+            if not template_exists and not problem_exists:
                 # 기본 평가 템플릿
                 default_template = pd.DataFrame({
                     "대분류": ["예시"],
@@ -171,6 +190,13 @@ st.markdown("---")
 if 'current_page' not in st.session_state:
     st.session_state.current_page = "평가표"
 
+# DataFrame 초기화 (None 방지)
+if 'template_table' not in st.session_state:
+    st.session_state["template_table"] = pd.DataFrame()
+
+if 'problem_table' not in st.session_state:
+    st.session_state["problem_table"] = pd.DataFrame()
+
 # 버튼 메뉴
 if st.sidebar.button("평가표", use_container_width=True):
     st.session_state.current_page = "평가표"
@@ -206,17 +232,20 @@ if st.sidebar.button("📊 시트 만들기", use_container_width=True, type="pr
     else:
         st.sidebar.error(f"엑셀 파일 생성 실패: {filename}")
 
+# 디버그 모드 (개발 중에만 사용)
+with st.sidebar:
+    if st.checkbox("디버그 모드"):
+        st.write("**세션 상태 확인**")
+        if not st.session_state["template_table"].empty:
+            st.write(f"평가 템플릿 행 수: {len(st.session_state['template_table'])}")
+        if not st.session_state["problem_table"].empty:
+            st.write(f"문제 템플릿 행 수: {len(st.session_state['problem_table'])}")
+        st.write(f"현재 페이지: {st.session_state.current_page}")
+
 page = st.session_state.current_page
 
 if page == "평가표":
     st.header("평가표")
-
-    # st.info("""
-    #     **📋 평가 템플릿 생성 방법**
-    #     1. 개발/비개발 과목을 선택
-    #     2. 원하는 평가 항목들을 선택
-    #     3. "평가 템플릿에 추가" 버튼 클릭
-    # """)
     
     # 개발/비개발 토글
     job_type = st.selectbox("과목 선택", ["개발", "비개발"])
@@ -277,7 +306,6 @@ if page == "평가표":
                     rows.append({'대분류': 대분류, '중분류': 중분류, '소분류': 소분류})
         df = pd.DataFrame(rows)
 
-    
     # 평가 표 편집 가능하게 표시
     # 드롭다운 옵션 준비
     dev_major_options = list(dev_hierarchy.keys()) if job_type == "개발" else []
@@ -329,8 +357,6 @@ if page == "평가표":
                 "하": "",
                 "배점 X": ""
             })
-            if "template_table" not in st.session_state:
-                st.session_state["template_table"] = pd.DataFrame(columns=template_columns)
             st.session_state["template_table"] = pd.concat([
                 st.session_state["template_table"], selected_template
             ], ignore_index=True).drop_duplicates()
@@ -341,7 +367,8 @@ if page == "평가표":
 elif page == "출제자 평가 템플릿":
     st.header("출제자 평가 템플릿")
 
-    if "template_table" in st.session_state and not st.session_state["template_table"].empty:
+    # 안전한 조건 체크
+    if not st.session_state["template_table"].empty:
         # 텍스트 입력 가능한 컬럼 설정
         col_config = {
             "평가 내용": st.column_config.TextColumn("평가 내용", width="medium"),
@@ -364,16 +391,12 @@ elif page == "출제자 평가 템플릿":
         
         # 편집된 데이터를 즉시 세션 상태에 저장
         st.session_state["template_table"] = edited_df
-        
-        # 저장 상태 표시
-        if st.session_state.get("template_editor_changed", False):
-            st.success("✅ 변경사항이 자동 저장되었습니다!")
            
     else:
         st.info("아직 추가된 항목이 없습니다. 먼저 '평가표' 페이지에서 항목을 추가해주세요.")
 
     # 문제 만들기 버튼 (현재 평가 템플릿을 문제 템플릿으로 복사)
-    if "template_table" in st.session_state and not st.session_state["template_table"].empty:
+    if not st.session_state["template_table"].empty:
         if st.button("문제 만들기", key="make_problem"):
             # 문제 템플릿 열 정의
             problem_columns = [
@@ -409,7 +432,8 @@ elif page == "출제자 평가 템플릿":
 elif page == "출제자 문제 템플릿":
     st.header("출제자 문제 템플릿")
 
-    if "problem_table" in st.session_state and not st.session_state["problem_table"].empty:
+    # 안전한 조건 체크
+    if not st.session_state["problem_table"].empty:
         # 진행상황 컬럼만 진행중/진행 완료 선택 가능한 Selectbox로, 나머지는 기본값
         col_config = {
             "진행상황": st.column_config.SelectboxColumn("진행상황", options=["진행중", "진행 완료"], required=True),
@@ -429,10 +453,6 @@ elif page == "출제자 문제 템플릿":
         
         # 편집된 데이터를 즉시 세션 상태에 저장
         st.session_state["problem_table"] = edited_df
-        
-        # 저장 상태 표시
-        if st.session_state.get("problem_editor_changed", False):
-            st.success("✅ 변경사항이 자동 저장되었습니다!")
             
     else:
         st.info("아직 생성된 문제가 없습니다. '출제자 평가 템플릿'에서 '문제 만들기' 버튼을 눌러주세요.")
